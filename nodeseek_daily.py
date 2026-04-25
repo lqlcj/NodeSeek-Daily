@@ -10,6 +10,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import random
+import re
+import subprocess
 import time
 import traceback
 import undetected_chromedriver as uc
@@ -22,6 +24,36 @@ cookie = os.environ.get("NS_COOKIE") or os.environ.get("COOKIE")
 headless = os.environ.get("HEADLESS", "true").lower() == "true"
 
 randomInputStr = ["bd","支持下","帮顶一下","顶一下"]
+
+def get_chrome_major_version():
+    """
+    获取当前 GitHub Actions 环境里安装的 Chromium 主版本号，
+    避免 undetected-chromedriver 下载到不匹配的 ChromeDriver。
+    """
+    commands = [
+        ["chromium-browser", "--version"],
+        ["chromium", "--version"],
+        ["google-chrome", "--version"],
+    ]
+
+    for command in commands:
+        try:
+            version_output = subprocess.check_output(
+                command,
+                text=True,
+                stderr=subprocess.DEVNULL,
+            )
+            match = re.search(r"(\d+)\.", version_output)
+            if match:
+                chrome_major = int(match.group(1))
+                print(f"检测到浏览器版本: {version_output.strip()}")
+                print(f"使用 ChromeDriver 主版本: {chrome_major}")
+                return chrome_major
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            continue
+
+    print("未能检测到浏览器主版本，将使用 undetected-chromedriver 默认逻辑")
+    return None
 
 def click_sign_icon(driver):
     """
@@ -117,7 +149,11 @@ def setup_driver_and_cookies():
             options.add_argument('--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
         
         print("正在启动Chrome...")
-        driver = uc.Chrome(options=options)
+        chrome_major = get_chrome_major_version()
+        if chrome_major:
+            driver = uc.Chrome(options=options, version_main=chrome_major)
+        else:
+            driver = uc.Chrome(options=options)
         
         if headless:
             # 执行 JavaScript 来修改 webdriver 标记
